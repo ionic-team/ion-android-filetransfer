@@ -1,4 +1,4 @@
-package organizationidplaceholder.libtemplateplaceholder
+package io.ionic.libs.ionfiletransferlib.ion-android
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,6 +19,6 @@ class ExampleInstrumentedTest {
     fun useAppContext() {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("organizationidplaceholder.libtemplateplaceholder", appContext.packageName)
+        assertEquals("io.ionic.libs.ionfiletransferlib.ion-android", appContext.packageName)
     }
 }
