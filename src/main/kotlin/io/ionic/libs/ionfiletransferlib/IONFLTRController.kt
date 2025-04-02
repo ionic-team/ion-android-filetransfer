@@ -162,7 +162,12 @@ class IONFLTRController internal constructor(
                 if (options.chunkedMode) {
                     connection.setChunkedStreamingMode(BUFFER_SIZE)
                 } else {
-                    connection.setFixedLengthStreamingMode(fileSize)
+                    if (!options.httpOptions.method.equals("POST", ignoreCase = true)) {
+                        connection.setFixedLengthStreamingMode(fileSize)
+                    } else {
+                        // Use chunked transfer encoding for multipart uploads
+                        connection.setChunkedStreamingMode(BUFFER_SIZE)
+                    }
                 }
                 
                 // Set content type if not already set
