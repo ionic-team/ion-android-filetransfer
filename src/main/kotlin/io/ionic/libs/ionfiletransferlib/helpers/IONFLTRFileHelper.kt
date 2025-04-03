@@ -4,7 +4,7 @@ import android.webkit.MimeTypeMap
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import java.io.File
 
-class IONFLTRFileHelper {
+internal class IONFLTRFileHelper {
     /**
      * Gets a MIME type based on the provided file path
      *

@@ -44,5 +44,5 @@ data class IONFLTRTransferComplete(
     val totalBytes: Long,
     val responseCode: String,
     val responseBody: String?,
-    val headers: Map<String, String>?
+    val headers: Map<String, List<String>>?
 ) 

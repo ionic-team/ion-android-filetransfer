@@ -24,7 +24,7 @@ sealed class IONFLTRException(
     class CannotCreateDirectory(val path: String, override val cause: Throwable? = null) :
         IONFLTRException("Cannot create directory at $path", cause)
 
-    class HttpError(val responseCode: String, val responseBody: String?, val headers: Map<String, String>?) :
+    class HttpError(val responseCode: String, val responseBody: String?, val headers: Map<String, List<String>>?) :
         IONFLTRException("HTTP error: $responseCode")
 
     class ConnectionError(override val cause: Throwable?) :

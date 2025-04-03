@@ -23,6 +23,7 @@ data class IONFLTRDownloadOptions(
  * @property chunkedMode Whether to use chunked transfer encoding
  * @property mimeType The MIME type of the file (null for auto-detection)
  * @property fileKey The form field name for the file when uploading as multipart/form-data
+ * @property formParams Additional form parameters to include in multipart/form-data uploads
  * @property httpOptions Additional HTTP options for the upload request
  */
 data class IONFLTRUploadOptions(
@@ -31,6 +32,7 @@ data class IONFLTRUploadOptions(
     val chunkedMode: Boolean = false,
     val mimeType: String? = null,
     val fileKey: String = "file",
+    val formParams: Map<String, String>? = null,
     val httpOptions: IONFLTRTransferHttpOptions = IONFLTRTransferHttpOptions("POST")
 )
 

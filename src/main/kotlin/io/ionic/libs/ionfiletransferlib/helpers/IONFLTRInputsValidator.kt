@@ -2,7 +2,7 @@ package io.ionic.libs.ionfiletransferlib.helpers
 
 import java.util.regex.Pattern
 
-class IONFLTRInputsValidator {
+internal class IONFLTRInputsValidator {
     /**
      * Boolean method to check if a given file path is valid
      * @param path The file path to check
