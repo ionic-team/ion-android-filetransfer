@@ -14,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -163,33 +162,31 @@ class IONFLTRController internal constructor(
         targetFile: File,
         contentLength: Long,
         emit: suspend (IONFLTRTransferResult) -> Unit
-    ): Long = withContext(Dispatchers.IO) {
-        BufferedInputStream(connection.inputStream).use { inputStream ->
-            FileOutputStream(targetFile).use { fileOut ->
-                BufferedOutputStream(fileOut).use { outputStream ->
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    var bytesRead: Int
-                    var totalBytesRead: Long = 0
-                    val lengthComputable = contentLength > 0
+    ): Long = BufferedInputStream(connection.inputStream).use { inputStream ->
+        FileOutputStream(targetFile).use { fileOut ->
+            BufferedOutputStream(fileOut).use { outputStream ->
+                val buffer = ByteArray(BUFFER_SIZE)
+                var bytesRead: Int
+                var totalBytesRead: Long = 0
+                val lengthComputable = contentLength > 0
 
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        outputStream.write(buffer, 0, bytesRead)
-                        totalBytesRead += bytesRead
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalBytesRead += bytesRead
 
-                        // Emit progress
-                        emit(
-                            IONFLTRTransferResult.Ongoing(
-                                IONFLTRProgressStatus(
-                                    bytes = totalBytesRead,
-                                    contentLength = contentLength,
-                                    lengthComputable = lengthComputable
-                                )
+                    // Emit progress
+                    emit(
+                        IONFLTRTransferResult.Ongoing(
+                            IONFLTRProgressStatus(
+                                bytes = totalBytesRead,
+                                contentLength = contentLength,
+                                lengthComputable = lengthComputable
                             )
                         )
-                    }
-
-                    totalBytesRead
+                    )
                 }
+
+                totalBytesRead
             }
         }
     }
@@ -203,13 +200,14 @@ class IONFLTRController internal constructor(
      * @param totalSize The total size to report in progress updates
      * @param emit Function to emit progress updates
      */
-    private suspend fun writeFileWithProgress(
+    @Suppress("BlockingMethodInNonBlockingContext") // method will always be called from IO scope
+    private suspend fun uploadFileWithProgress(
         file: File,
         outputStream: BufferedOutputStream,
         totalBytesWritten: Long,
         totalSize: Long,
         emit: suspend (IONFLTRTransferResult) -> Unit
-    ): Long = withContext(Dispatchers.IO) {
+    ): Long {
         var currentTotalBytes = totalBytesWritten
         FileInputStream(file).use { fileInputStream ->
             BufferedInputStream(fileInputStream).use { inputStream ->
@@ -223,7 +221,7 @@ class IONFLTRController internal constructor(
                 }
             }
         }
-        currentTotalBytes
+        return currentTotalBytes
     }
 
     /**
@@ -352,7 +350,7 @@ class IONFLTRController internal constructor(
                 emit(createUploadFileProgress(bytes = totalBytesWritten, total = totalSize))
 
                 // Write file content
-                totalBytesWritten = writeFileWithProgress(
+                totalBytesWritten = uploadFileWithProgress(
                     file = file,
                     outputStream = outputStream,
                     totalBytesWritten = totalBytesWritten,
@@ -383,7 +381,7 @@ class IONFLTRController internal constructor(
         connection.outputStream.use { connOutputStream ->
             BufferedOutputStream(connOutputStream).use { outputStream ->
                 // Direct upload (not multipart)
-                totalBytesWritten = writeFileWithProgress(
+                totalBytesWritten = uploadFileWithProgress(
                     file = file,
                     outputStream = outputStream,
                     totalBytesWritten = 0,
