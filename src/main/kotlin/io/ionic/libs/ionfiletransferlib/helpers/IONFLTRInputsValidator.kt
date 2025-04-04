@@ -1,8 +1,25 @@
 package io.ionic.libs.ionfiletransferlib.helpers
 
+import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import java.util.regex.Pattern
 
 internal class IONFLTRInputsValidator {
+
+    /**
+     * Validates the URL and file path for transfer operations.
+     *
+     * @param url The URL to validate
+     * @param filePath The file path to validate
+     * @throws IONFLTRException if validation fails
+     */
+    fun validateTransferInputs(url: String, filePath: String) {
+        when {
+            url.isBlank() -> throw IONFLTRException.EmptyURL(url)
+            !isURLValid(url) -> throw IONFLTRException.InvalidURL(url)
+            !isPathValid(filePath) -> throw IONFLTRException.InvalidPath(filePath)
+        }
+    }
+
     /**
      * Boolean method to check if a given file path is valid
      * @param path The file path to check
