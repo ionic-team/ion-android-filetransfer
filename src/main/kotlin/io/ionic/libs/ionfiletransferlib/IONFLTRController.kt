@@ -1,5 +1,7 @@
 package io.ionic.libs.ionfiletransferlib
 
+import android.content.Context
+import io.ionic.libs.ionfiletransferlib.helpers.FileToUploadInfo
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRConnectionHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRFileHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRInputsValidator
@@ -17,7 +19,6 @@ import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 
@@ -31,9 +32,9 @@ class IONFLTRController internal constructor(
     private val fileHelper: IONFLTRFileHelper,
     private val connectionHelper: IONFLTRConnectionHelper
 ) {
-    constructor() : this(
+    constructor(context: Context) : this(
         inputsValidator = IONFLTRInputsValidator(),
-        fileHelper = IONFLTRFileHelper(),
+        fileHelper = IONFLTRFileHelper(contentResolver = context.contentResolver),
         connectionHelper = IONFLTRConnectionHelper()
     )
 
@@ -96,7 +97,7 @@ class IONFLTRController internal constructor(
             val (file, connection) = prepareForUpload(options)
 
             try {
-                val useChunkedMode = options.chunkedMode || file.length() == -1L
+                val useChunkedMode = options.chunkedMode || file.size == -1L
 
                 // Configure connection based on upload mode
                 val multiPartFormData =
@@ -202,16 +203,15 @@ class IONFLTRController internal constructor(
      * @param totalSize The total size to report in progress updates
      * @param emit Function to emit progress updates
      */
-    @Suppress("BlockingMethodInNonBlockingContext") // method will always be called from IO scope
     private suspend fun uploadFileWithProgress(
-        file: File,
+        file: FileToUploadInfo,
         outputStream: BufferedOutputStream,
         totalBytesWritten: Long,
         totalSize: Long,
         emit: suspend (IONFLTRTransferResult) -> Unit
     ): Long {
         var currentTotalBytes = totalBytesWritten
-        FileInputStream(file).use { fileInputStream ->
+        file.inputStream.use { fileInputStream ->
             BufferedInputStream(fileInputStream).use { inputStream ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 var bytesRead: Int
@@ -229,15 +229,12 @@ class IONFLTRController internal constructor(
     /**
      * Prepares for upload by validating inputs and setting up connection.
      */
-    private fun prepareForUpload(options: IONFLTRUploadOptions): Pair<File, HttpURLConnection> {
+    private fun prepareForUpload(options: IONFLTRUploadOptions): Pair<FileToUploadInfo, HttpURLConnection> {
         // Validate inputs
         inputsValidator.validateTransferInputs(options.url, options.filePath)
 
         // Check if file exists
-        val file = File(options.filePath)
-        if (!file.exists()) {
-            throw IONFLTRException.FileDoesNotExist()
-        }
+        val file = fileHelper.getFileToUploadInfo(options.filePath)
 
         // Setup connection
         val connection = connectionHelper.setupConnection(options.url, options.httpOptions)
@@ -253,7 +250,7 @@ class IONFLTRController internal constructor(
     private fun configureConnectionForUpload(
         connection: HttpURLConnection,
         options: IONFLTRUploadOptions,
-        file: File,
+        file: FileToUploadInfo,
         useChunkedMode: Boolean
     ): Pair<String, String>? {
         var multiPartUpload = false
@@ -279,12 +276,12 @@ class IONFLTRController internal constructor(
             connection.setChunkedStreamingMode(BUFFER_SIZE)
             connection.setRequestProperty("Transfer-Encoding", "chunked")
         } else if (!multiPartUpload) {
-            connection.setFixedLengthStreamingMode(file.length())
+            connection.setFixedLengthStreamingMode(file.size)
         } else {
             val multipartData = createMultipartData(options, file.name)
             // Calculate total size including multipart overhead
             val multipartByteArray = (multipartData.first + multipartData.second).toByteArray()
-            connection.setFixedLengthStreamingMode(file.length() + multipartByteArray.size)
+            connection.setFixedLengthStreamingMode(file.size + multipartByteArray.size)
             return multipartData
         }
 
@@ -336,7 +333,7 @@ class IONFLTRController internal constructor(
     private suspend fun handleMultipartUpload(
         connection: HttpURLConnection,
         multipartExtraData: Pair<String, String>,
-        file: File,
+        file: FileToUploadInfo,
         emit: suspend (IONFLTRTransferResult) -> Unit
     ): Long {
         var totalBytesWritten: Long = 0
@@ -347,7 +344,7 @@ class IONFLTRController internal constructor(
                 val afterDataByteArray = multipartExtraData.second.toByteArray()
 
                 // Actual total size includes file size plus multipart overhead
-                val totalSize = file.length() + beforeDataByteArray.size + afterDataByteArray.size
+                val totalSize = file.size + beforeDataByteArray.size + afterDataByteArray.size
 
                 // write multipart form content before file
                 totalBytesWritten += beforeDataByteArray.size
@@ -378,7 +375,7 @@ class IONFLTRController internal constructor(
      */
     private suspend fun handleDirectUpload(
         connection: HttpURLConnection,
-        file: File,
+        file: FileToUploadInfo,
         emit: suspend (IONFLTRTransferResult) -> Unit
     ): Long {
         var totalBytesWritten: Long
@@ -390,7 +387,7 @@ class IONFLTRController internal constructor(
                     file = file,
                     outputStream = outputStream,
                     totalBytesWritten = 0,
-                    totalSize = file.length(),
+                    totalSize = file.size,
                     emit = { emit(it) }
                 )
             }
