@@ -1,15 +1,36 @@
 buildscript {
-    ext.kotlin_version = "1.5.21"
-    ext.jacocoVersion = '0.8.7'
+    ext.kotlin_version = "1.9.24"
+    ext.jacocoVersion = '0.8.9'
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.1.2'
+        if (System.getenv("SHOULD_PUBLISH") == "true") {
+            classpath("io.github.gradle-nexus:publish-plugin:1.1.0")
+        }
+        classpath 'com.android.tools.build:gradle:8.7.3'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath "org.jacoco:org.jacoco.core:$jacocoVersion"
     }
+}
+
+plugins {
+    id "org.sonarqube" version "3.5.0.2730"
+}
+
+sonarqube {
+    // TODO update this information once ionic Sonarqube is available
+    properties {
+        property "sonar.projectKey", "OutSystems_IONFileTransferLib-Android"
+        property "sonar.organization", "outsystemsrd"
+        property "sonar.host.url", "https://sonarcloud.io"
+    }
+}
+
+if (System.getenv("SHOULD_PUBLISH") == "true") {
+    apply plugin: "io.github.gradle-nexus.publish-plugin"
+    apply from: file("./scripts/publish-root.gradle")
 }
 
 apply plugin: "com.android.library"
@@ -17,11 +38,12 @@ apply plugin: "kotlin-android"
 apply plugin: "jacoco"
 
 android {
-    compileSdk 32
+    namespace "io.ionic.libs.ionfiletransferlib"
+    compileSdk 35
 
     defaultConfig {
-        minSdk 26
-        targetSdk 32
+        minSdk 23
+        targetSdk 35
         versionCode 1
         versionName "1.0"
 
@@ -35,30 +57,41 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
 
-    task jacocoTestReport(type: JacocoReport, dependsOn: ['testDebugUnitTest']) {
+    tasks.register('jacocoTestReport', JacocoReport) {
+        dependsOn['testDebugUnitTest']
 
         reports {
-            xml.enabled = true
-            html.enabled = true
+            xml.getRequired().set(true)
+            html.getRequired().set(true)
         }
 
         def fileFilter = ['**/BuildConfig.*', '**/Manifest*.*']
-        def debugTree = fileTree(dir: "${buildDir}/tmp/kotlin-classes/debugUnitTest", excludes: fileFilter)
-        def mainSrc = "${project.projectDir}/src/main/java"
+        def debugTree = fileTree(dir: "${layout.buildDirectory}/tmp/kotlin-classes/debugUnitTest", excludes: fileFilter)
+        def mainSrc = "${project.projectDir}/src/main/kotlin"
 
         sourceDirectories.setFrom(files([mainSrc]))
         classDirectories.setFrom(files([debugTree]))
-        executionData.setFrom(fileTree(dir: "$buildDir", includes: [
+        executionData.setFrom(fileTree(dir: "${layout.buildDirectory}", includes: [
                 "jacoco/testDebugUnitTest.exec",
                 "outputs/code-coverage/connected/*coverage.ec"
         ]))
+    }
+
+    packagingOptions {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+
+    publishing {
+        singleVariant("release")
     }
 }
 
@@ -69,11 +102,15 @@ repositories {
 
 dependencies {
 
-    implementation 'androidx.core:core-ktx:1.7.0'
-    implementation 'androidx.appcompat:appcompat:1.4.1'
-    implementation 'com.google.android.material:material:1.5.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.activity:activity-ktx:1.10.1'
+
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.3'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+}
+
+if (System.getenv("SHOULD_PUBLISH") == "true") {
+    apply from: file("./scripts/publish-module.gradle")
 }
