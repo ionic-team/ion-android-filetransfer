@@ -167,8 +167,10 @@ class IONFLTRController internal constructor(
             BufferedOutputStream(fileOut).use { outputStream ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 var bytesRead: Int
+                val lengthComputable = connection.contentEncoding.let {
+                    it == null || it.equals("gzip", ignoreCase = true)
+                } && contentLength > 0
                 var totalBytesRead: Long = 0
-                val lengthComputable = contentLength > 0
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                     outputStream.write(buffer, 0, bytesRead)
@@ -269,6 +271,9 @@ class IONFLTRController internal constructor(
                 connection.setRequestProperty("Content-Type", mimeType)
             }
         }
+
+        // gzip to allow for better progress tracking
+        connection.setRequestProperty("Accept-Encoding", "gzip")
 
         if (useChunkedMode) {
             connection.setChunkedStreamingMode(BUFFER_SIZE)
