@@ -23,10 +23,11 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     fun getFileToUploadInfo(filePath: String): FileToUploadInfo {
         return if (filePath.startsWith("content://")) {
             val uri = filePath.toUri()
-            val cursor =
-                contentResolver.query(uri, null, null, null, null)!!
+            val cursor = contentResolver.query(uri, null, null, null, null) 
+                ?: throw IONFLTRException.FileDoesNotExist()
             cursor.use {
                 val fileName = getNameForContentUri(cursor)
+                    ?: throw IONFLTRException.FileDoesNotExist()
                 val fileSize = getSizeForContentUri(cursor, uri)
                 val inputStream = contentResolver.openInputStream(uri)
                     ?: throw IONFLTRException.FileDoesNotExist()
@@ -95,9 +96,9 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
      * Gets the name of a file in content uri
      *
      * @param cursor the android [Cursor] containing information about the uri
-     * @return the name of the file, or exception if not found
+     * @return the name of the file, or null if no display name column was found
      */
-    private fun getNameForContentUri(cursor: Cursor): String {
+    private fun getNameForContentUri(cursor: Cursor): String? {
         val columnIndex = cursor.getColumnIndexForNames(
             columnNames = listOf(
                 OpenableColumns.DISPLAY_NAME,
@@ -105,7 +106,7 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME
             )
         )
-        return columnIndex?.let { cursor.getString(columnIndex) }!!
+        return columnIndex?.let { cursor.getString(columnIndex) }
     }
 
     private fun Cursor.getColumnIndexForNames(

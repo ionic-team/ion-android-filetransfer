@@ -13,10 +13,10 @@ sealed class IONFLTRException(
         IONFLTRException("The provided path is either null or empty.")
 
     class EmptyURL(val url: String?) :
-        IONFLTRException("The provided url is either null or empty.")
+        IONFLTRException("The provided URL is either null or empty.")
 
     class InvalidURL(val url: String) : 
-        IONFLTRException("The provided url is not valid.")
+        IONFLTRException("The provided URL is not valid.")
 
     class FileDoesNotExist(override val cause: Throwable? = null) :
         IONFLTRException("The specified file does not exist", cause)

@@ -25,7 +25,7 @@ internal class IONFLTRInputsValidator {
      * @param path The file path to check
      * @return true if path is valid, false otherwise
      */
-    fun isPathValid(path: String?): Boolean {
+    private fun isPathValid(path: String?): Boolean {
         return !path.isNullOrBlank()
     }
 
@@ -34,7 +34,7 @@ internal class IONFLTRInputsValidator {
      * @param url The URL to check
      * @return true if URL is valid, false otherwise
      */
-    fun isURLValid(url: String): Boolean {
+    private fun isURLValid(url: String): Boolean {
         val pattern =
             Pattern.compile("http[s]?://(([^/:.[:space:]]+(.[^/:.[:space:]]+)*)|([0-9](.[0-9]{3})))(:[0-9]+)?((/[^?#[:space:]]+)([^#[:space:]]+)?(#.+)?)?")
         return pattern.matcher(url).find()

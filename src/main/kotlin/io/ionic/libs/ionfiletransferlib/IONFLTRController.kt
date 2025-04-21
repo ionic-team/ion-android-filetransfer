@@ -5,7 +5,9 @@ import io.ionic.libs.ionfiletransferlib.helpers.FileToUploadInfo
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRConnectionHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRFileHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRInputsValidator
+import io.ionic.libs.ionfiletransferlib.helpers.assertSuccessHttpResponse
 import io.ionic.libs.ionfiletransferlib.helpers.runCatchingIONFLTRExceptions
+import io.ionic.libs.ionfiletransferlib.helpers.use
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRDownloadOptions
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRProgressStatus
@@ -56,13 +58,13 @@ class IONFLTRController internal constructor(
             // Prepare for download
             val (targetFile, connection) = prepareForDownload(options)
 
-            try {
+            connection.use { conn ->
                 // Execute the download and handle response
-                val contentLength = beginDownload(connection)
+                val contentLength = beginDownload(conn)
 
                 // Perform the actual file download with progress reporting
                 val totalBytesRead = downloadFileWithProgress(
-                    connection = connection,
+                    connection = conn,
                     targetFile = targetFile,
                     contentLength = contentLength,
                     emit = { emit(it) }
@@ -73,14 +75,12 @@ class IONFLTRController internal constructor(
                     IONFLTRTransferResult.Complete(
                         IONFLTRTransferComplete(
                             totalBytes = totalBytesRead,
-                            responseCode = connection.responseCode.toString(),
+                            responseCode = conn.responseCode.toString(),
                             responseBody = null,
-                            headers = connection.headerFields
+                            headers = conn.headerFields
                         )
                     )
                 )
-            } finally {
-                connection.disconnect()
             }
         }.getOrThrow()
     }.flowOn(Dispatchers.IO)
@@ -96,27 +96,19 @@ class IONFLTRController internal constructor(
             // Prepare for upload
             val (file, connection) = prepareForUpload(options)
 
-            try {
-                val useChunkedMode = options.chunkedMode || file.size == -1L
-
-                // Configure connection based on upload mode
-                val multiPartFormData =
-                    configureConnectionForUpload(connection, options, file, useChunkedMode)
-
-                connection.doOutput = true
-                connection.connect()
+            connection.use { conn ->
+                // Execute the upload and handle response
+                val multiPartFormData = beginUpload(conn, options, file)
 
                 // Perform the upload
                 val totalBytesWritten: Long = if (multiPartFormData != null) {
-                    handleMultipartUpload(connection, multiPartFormData, file, emit = { emit(it) })
+                    handleMultipartUpload(conn, multiPartFormData, file, emit = { emit(it) })
                 } else {
-                    handleDirectUpload(connection, file, emit = { emit(it) })
+                    handleDirectUpload(conn, file, emit = { emit(it) })
                 }
 
                 // Process the response
-                processUploadResponse(connection, totalBytesWritten, emit = { emit(it) })
-            } finally {
-                connection.disconnect()
+                processUploadResponse(conn, totalBytesWritten, emit = { emit(it) })
             }
         }.getOrThrow()
     }.flowOn(Dispatchers.IO)
@@ -153,6 +145,30 @@ class IONFLTRController internal constructor(
         val contentLength = connection.contentLength.toLong()
 
         return contentLength
+    }
+
+    /**
+     * Begins the upload process by configuring the connection and connecting.
+     *
+     * @param connection The HTTP connection to configure
+     * @param options The upload options
+     * @param file Information about the file to upload
+     * @return multi-part form data to append to beginning and end if needed, null otherwise
+     */
+    private fun beginUpload(
+        connection: HttpURLConnection,
+        options: IONFLTRUploadOptions,
+        file: FileToUploadInfo
+    ): Pair<String, String>? {
+        val useChunkedMode = options.chunkedMode || file.size == -1L
+
+        // Configure connection based on upload mode
+        val multiPartFormData = configureConnectionForUpload(connection, options, file, useChunkedMode)
+
+        connection.doOutput = true
+        connection.connect()
+
+        return multiPartFormData
     }
 
     /**
@@ -211,16 +227,14 @@ class IONFLTRController internal constructor(
         emit: suspend (IONFLTRTransferResult) -> Unit
     ): Long {
         var currentTotalBytes = totalBytesWritten
-        file.inputStream.use { fileInputStream ->
-            BufferedInputStream(fileInputStream).use { inputStream ->
-                val buffer = ByteArray(BUFFER_SIZE)
-                var bytesRead: Int
+        file.inputStream.buffered().use { inputStream ->
+            val buffer = ByteArray(BUFFER_SIZE)
+            var bytesRead: Int
 
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    currentTotalBytes += bytesRead
-                    emit(createUploadFileProgress(bytes = currentTotalBytes, total = totalSize))
-                }
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                outputStream.write(buffer, 0, bytesRead)
+                currentTotalBytes += bytesRead
+                emit(createUploadFileProgress(bytes = currentTotalBytes, total = totalSize))
             }
         }
         return currentTotalBytes
@@ -245,7 +259,7 @@ class IONFLTRController internal constructor(
     /**
      * Configures the connection for upload based on the upload mode.
      *
-     * @return multi-part form data to append to beggining and end
+     * @return multi-part form data to append to beginning and end
      */
     private fun configureConnectionForUpload(
         connection: HttpURLConnection,
@@ -351,14 +365,16 @@ class IONFLTRController internal constructor(
                 outputStream.write(beforeDataByteArray)
                 emit(createUploadFileProgress(bytes = totalBytesWritten, total = totalSize))
 
-                // Write file content
-                totalBytesWritten = uploadFileWithProgress(
-                    file = file,
-                    outputStream = outputStream,
-                    totalBytesWritten = totalBytesWritten,
-                    totalSize = totalSize,
-                    emit = { emit(it) }
-                )
+                // Write file content (skip reading the file if it's empty)
+                if (file.size > 0) {
+                    totalBytesWritten = uploadFileWithProgress(
+                        file = file,
+                        outputStream = outputStream,
+                        totalBytesWritten = totalBytesWritten,
+                        totalSize = totalSize,
+                        emit = { emit(it) }
+                    )
+                }
 
                 // write multipart form content after file
                 outputStream.write(afterDataByteArray)
@@ -378,6 +394,12 @@ class IONFLTRController internal constructor(
         file: FileToUploadInfo,
         emit: suspend (IONFLTRTransferResult) -> Unit
     ): Long {
+        if (file.size == 0L) {
+            // For empty files, still emit a progress event showing 0 bytes
+            emit(createUploadFileProgress(bytes = 0, total = 0))
+            return 0L
+        }
+        
         var totalBytesWritten: Long
 
         connection.outputStream.use { connOutputStream ->
@@ -429,19 +451,6 @@ class IONFLTRController internal constructor(
         )
     }
 
-    private fun HttpURLConnection.assertSuccessHttpResponse() {
-        if (responseCode in 200..299) {
-            return // successful response
-        }
-        errorStream?.bufferedReader()?.readText()?.also {
-            throw IONFLTRException.HttpError(
-                responseCode.toString(),
-                it,
-                headerFields
-            )
-        }
-    }
-
     /**
      * Checks if the HTTP method is either POST or PUT.
      *
@@ -451,4 +460,4 @@ class IONFLTRController internal constructor(
     private fun isPostOrPutMethod(method: String): Boolean {
         return method.equals("POST", ignoreCase = true) || method.equals("PUT", ignoreCase = true)
     }
-} 
+}

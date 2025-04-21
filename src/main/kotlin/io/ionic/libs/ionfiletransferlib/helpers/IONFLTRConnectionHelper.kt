@@ -1,9 +1,47 @@
 package io.ionic.libs.ionfiletransferlib.helpers
 
+import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRTransferHttpOptions
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+
+/**
+ * Extension function to use HttpURLConnection with the Kotlin use pattern
+ * because HttpURLConnection doesn't implement Closeable.
+ *
+ * @param block The function to execute on the connection before closing it
+ * @return The result of the block function
+ */
+inline fun <R> HttpURLConnection.use(block: (HttpURLConnection) -> R): R {
+    try {
+        return block(this)
+    } finally {
+        this.disconnect()
+    }
+}
+
+
+/**
+ * Extension function to assert that an HTTP response was successful (2xx status code).
+ * If the response was not successful, throws an IONFLTRException.HttpError with details
+ * from the error stream.
+ * 
+ * @throws IONFLTRException.HttpError if the response code is not in the 200-299 range
+ */
+
+fun HttpURLConnection.assertSuccessHttpResponse() {
+    if (responseCode in 200..299) {
+        return // successful response
+    }
+    errorStream?.bufferedReader()?.readText()?.also {
+        throw IONFLTRException.HttpError(
+            responseCode.toString(),
+            it,
+            headerFields
+        )
+    }
+}
 
 /**
  * Helper class for setting up HTTP connections with proper configuration.
