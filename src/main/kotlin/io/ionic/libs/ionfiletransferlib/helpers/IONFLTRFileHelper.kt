@@ -34,8 +34,8 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
                 FileToUploadInfo(fileName, fileSize, inputStream)
             }
         } else {
-            val filePathWithoutPrefix = filePath.removePrefix("file://")
-            val fileObject = File(filePathWithoutPrefix)
+            val cleanFilePath = normalizeFilePath(filePath)
+            val fileObject = File(cleanFilePath)
             if (!fileObject.exists()) {
                 throw IONFLTRException.FileDoesNotExist()
             }
@@ -43,6 +43,20 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
         }
     }
 
+    /**
+     * Normalizes a file path by removing URI prefixes like "file://", "file:/", etc.
+     *
+     * @param filePath The file path that might contain URI prefixes
+     * @return Cleaned file path without URI prefixes
+     */
+    fun normalizeFilePath(filePath: String): String {
+        return when {
+            filePath.startsWith("file://") -> filePath.removePrefix("file://")
+            filePath.startsWith("file:/") -> filePath.removePrefix("file:/")
+            filePath.startsWith("file:") -> filePath.removePrefix("file:")
+            else -> filePath
+        }
+    }
 
     /**
      * Gets a MIME type based on the provided file path
@@ -51,8 +65,10 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
      * @return The MIME type or null if it was unable to determine
      */
     fun getMimeType(filePath: String?): String? =
-        MimeTypeMap.getFileExtensionFromUrl(filePath)?.let { extension ->
-            MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+        filePath?.let { normalizeFilePath(it) }?.let { normalizedPath ->
+            MimeTypeMap.getFileExtensionFromUrl(normalizedPath)?.let { extension ->
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            }
         }
 
     /**
