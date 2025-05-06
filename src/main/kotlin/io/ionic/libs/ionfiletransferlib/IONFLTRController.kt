@@ -121,7 +121,8 @@ class IONFLTRController internal constructor(
         inputsValidator.validateTransferInputs(options.url, options.filePath)
 
         // Create parent directories if needed
-        val targetFile = File(options.filePath)
+        val normalizedFilePath = fileHelper.normalizeFilePath(options.filePath)
+        val targetFile = File(normalizedFilePath)
         fileHelper.createParentDirectories(targetFile)
 
         // Setup connection
