@@ -2,6 +2,9 @@ package io.ionic.libs.ionfiletransferlib.helpers
 
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import java.util.regex.Pattern
+import java.io.File
+import java.net.URI
+import java.net.URISyntaxException
 
 internal class IONFLTRInputsValidator {
 
@@ -26,7 +29,25 @@ internal class IONFLTRInputsValidator {
      * @return true if path is valid, false otherwise
      */
     private fun isPathValid(path: String?): Boolean {
-        return !path.isNullOrBlank()
+        if (path.isNullOrBlank()) {
+            return false
+        }
+
+        return try {
+            val resolvedPath: String
+            if (path.startsWith("file://")) {
+                val uri = URI(path)
+                if (uri.path == null) {
+                    return false
+                }
+                resolvedPath = uri.path
+            } else {
+                resolvedPath = path
+            }
+            File(resolvedPath).isAbsolute
+        } catch (e: URISyntaxException) {
+            false
+        }
     }
 
     /**
