@@ -12,6 +12,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import androidx.core.net.toUri
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     /**
@@ -23,7 +25,7 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     fun getFileToUploadInfo(filePath: String): FileToUploadInfo {
         return if (filePath.startsWith("content://")) {
             val uri = filePath.toUri()
-            val cursor = contentResolver.query(uri, null, null, null, null) 
+            val cursor = contentResolver.query(uri, null, null, null, null)
                 ?: throw IONFLTRException.FileDoesNotExist()
             cursor.use {
                 val fileName = getNameForContentUri(cursor)
@@ -45,16 +47,18 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
 
     /**
      * Normalizes a file path by removing URI prefixes like "file://", "file:/", etc.
+     * and encodes special characters
      *
      * @param filePath The file path that might contain URI prefixes
      * @return Cleaned file path without URI prefixes
      */
     fun normalizeFilePath(filePath: String): String {
+        val path = URLEncoder.encode(filePath, StandardCharsets.UTF_8.toString())
         return when {
-            filePath.startsWith("file://") -> filePath.removePrefix("file://")
-            filePath.startsWith("file:/") -> filePath.removePrefix("file:/")
-            filePath.startsWith("file:") -> filePath.removePrefix("file:")
-            else -> filePath
+            path.startsWith("file://") -> path.removePrefix("file://")
+            path.startsWith("file:/") -> path.removePrefix("file:/")
+            path.startsWith("file:") -> path.removePrefix("file:")
+            else -> path
         }
     }
 
