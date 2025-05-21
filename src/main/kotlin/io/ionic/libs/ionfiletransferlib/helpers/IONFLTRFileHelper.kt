@@ -23,7 +23,7 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     fun getFileToUploadInfo(filePath: String): FileToUploadInfo {
         return if (filePath.startsWith("content://")) {
             val uri = filePath.toUri()
-            val cursor = contentResolver.query(uri, null, null, null, null)
+            val cursor = contentResolver.query(uri, null, null, null, null) 
                 ?: throw IONFLTRException.FileDoesNotExist()
             cursor.use {
                 val fileName = getNameForContentUri(cursor)
@@ -45,7 +45,6 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
 
     /**
      * Normalizes a file path by removing URI prefixes like "file://", "file:/", etc.
-     *
      *
      * @param filePath The file path that might contain URI prefixes
      * @return Cleaned file path without URI prefixes
