@@ -118,10 +118,10 @@ class IONFLTRController internal constructor(
      */
     private fun prepareForDownload(options: IONFLTRDownloadOptions): Pair<File, HttpURLConnection> {
         // Validate inputs
-        val normalizedFilePath = fileHelper.normalizeFilePath(options.filePath)
-        inputsValidator.validateTransferInputs(options.url, normalizedFilePath)
+        inputsValidator.validateTransferInputs(options.url, options.filePath)
 
         // Create parent directories if needed
+        val normalizedFilePath = fileHelper.normalizeFilePath(options.filePath)
         val targetFile = File(normalizedFilePath)
         fileHelper.createParentDirectories(targetFile)
 

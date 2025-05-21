@@ -12,8 +12,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import androidx.core.net.toUri
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     /**
@@ -47,18 +45,17 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
 
     /**
      * Normalizes a file path by removing URI prefixes like "file://", "file:/", etc.
-     * and encodes special characters
+     *
      *
      * @param filePath The file path that might contain URI prefixes
      * @return Cleaned file path without URI prefixes
      */
     fun normalizeFilePath(filePath: String): String {
-        val path = URLEncoder.encode(filePath, StandardCharsets.UTF_8.toString())
         return when {
-            path.startsWith("file://") -> path.removePrefix("file://")
-            path.startsWith("file:/") -> path.removePrefix("file:/")
-            path.startsWith("file:") -> path.removePrefix("file:")
-            else -> path
+            filePath.startsWith("file://") -> filePath.removePrefix("file://")
+            filePath.startsWith("file:/") -> filePath.removePrefix("file:/")
+            filePath.startsWith("file:") -> filePath.removePrefix("file:")
+            else -> filePath
         }
     }
 
