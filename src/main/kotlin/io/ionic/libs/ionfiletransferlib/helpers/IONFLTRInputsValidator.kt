@@ -35,21 +35,8 @@ internal class IONFLTRInputsValidator {
         }
 
         return try {
-            val resolvedPath: String
-            if (path.startsWith("file://")) {
-                val encodedPath = URLEncoder.encode(
-                    path.replace("file://", ""),
-                    Charsets.UTF_8.toString()
-                ).replace("+", "%20")
-                val uri = URI(encodedPath)
-                if (uri.path == null) {
-                    return false
-                }
-                resolvedPath = uri.path
-            } else {
-                resolvedPath = path
-            }
-            File(resolvedPath).isAbsolute
+            val uri = URI(path).path
+            File(uri).isAbsolute
         } catch (e: URISyntaxException) {
             false
         }
