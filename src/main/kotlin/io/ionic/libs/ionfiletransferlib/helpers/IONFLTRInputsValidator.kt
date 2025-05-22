@@ -5,6 +5,7 @@ import java.util.regex.Pattern
 import java.io.File
 import java.net.URI
 import java.net.URISyntaxException
+import java.net.URLEncoder
 
 internal class IONFLTRInputsValidator {
 
@@ -34,17 +35,8 @@ internal class IONFLTRInputsValidator {
         }
 
         return try {
-            val resolvedPath: String
-            if (path.startsWith("file://")) {
-                val uri = URI(path)
-                if (uri.path == null) {
-                    return false
-                }
-                resolvedPath = uri.path
-            } else {
-                resolvedPath = path
-            }
-            File(resolvedPath).isAbsolute
+            val uri = URI(path).path
+            File(uri).isAbsolute
         } catch (e: URISyntaxException) {
             false
         }

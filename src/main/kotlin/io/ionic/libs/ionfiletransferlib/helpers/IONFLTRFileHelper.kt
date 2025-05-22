@@ -12,6 +12,9 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import androidx.core.net.toUri
+import java.net.URI
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     /**
@@ -35,7 +38,7 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
             }
         } else {
             val cleanFilePath = normalizeFilePath(filePath)
-            val fileObject = File(cleanFilePath)
+            val fileObject = File(URI(cleanFilePath).path)
             if (!fileObject.exists()) {
                 throw IONFLTRException.FileDoesNotExist()
             }
@@ -50,12 +53,17 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
      * @return Cleaned file path without URI prefixes
      */
     fun normalizeFilePath(filePath: String): String {
-        return when {
+        val path = when {
             filePath.startsWith("file://") -> filePath.removePrefix("file://")
             filePath.startsWith("file:/") -> filePath.removePrefix("file:/")
             filePath.startsWith("file:") -> filePath.removePrefix("file:")
             else -> filePath
         }
+
+        return URLEncoder.encode(
+            URLDecoder.decode(path, Charsets.UTF_8.toString()),
+            Charsets.UTF_8.toString()
+        ).replace("+", "%20")
     }
 
     /**
