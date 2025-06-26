@@ -30,7 +30,7 @@ else
     if grep --quiet "BUILD SUCCESSFUL" $LOG_OUTPUT; then
         printf %"s\n" "Success: Published to MavenCentral."
     else
-        printf %"s\n" "Error publishing, check $LOG_OUTPUT for more info! Manually review and release from the Sonatype Repository Manager may be necessary https://s01.oss.sonatype.org/"
+        printf %"s\n" "Error publishing, check $LOG_OUTPUT for more info! Manually review and release from the Central Portal may be necessary https://central.sonatype.com/publishing/deployments/"
         cat $LOG_OUTPUT
         exit 1
     fi
