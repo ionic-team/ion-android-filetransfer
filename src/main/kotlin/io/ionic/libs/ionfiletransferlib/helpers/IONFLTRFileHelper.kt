@@ -26,8 +26,10 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     fun getFileToUploadInfo(filePath: String): FileToUploadInfo {
         return if (filePath.startsWith("content://")) {
             val uri = filePath.toUri()
-            val cursor = contentResolver.query(uri, null, null, null, null) 
-                ?: throw IONFLTRException.FileDoesNotExist()
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            if (cursor?.moveToFirst() != true) {
+                throw IONFLTRException.FileDoesNotExist()
+            }
             cursor.use {
                 val fileName = getNameForContentUri(cursor)
                     ?: throw IONFLTRException.FileDoesNotExist()
