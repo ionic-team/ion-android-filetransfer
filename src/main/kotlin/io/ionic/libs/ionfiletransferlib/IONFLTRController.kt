@@ -285,9 +285,6 @@ class IONFLTRController internal constructor(
             }
         }
 
-        // gzip to allow for better progress tracking
-        connection.setRequestProperty("Accept-Encoding", "gzip")
-
         if (useChunkedMode) {
             connection.setChunkedStreamingMode(BUFFER_SIZE)
             connection.setRequestProperty("Transfer-Encoding", "chunked")
