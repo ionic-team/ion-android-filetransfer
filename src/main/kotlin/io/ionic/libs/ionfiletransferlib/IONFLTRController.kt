@@ -9,7 +9,6 @@ import io.ionic.libs.ionfiletransferlib.helpers.assertSuccessHttpResponse
 import io.ionic.libs.ionfiletransferlib.helpers.runCatchingIONFLTRExceptions
 import io.ionic.libs.ionfiletransferlib.helpers.use
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRDownloadOptions
-import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRProgressStatus
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRTransferComplete
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRTransferResult
@@ -186,9 +185,7 @@ class IONFLTRController internal constructor(
             BufferedOutputStream(fileOut).use { outputStream ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 var bytesRead: Int
-                val lengthComputable = connection.contentEncoding.let {
-                    it == null || it.equals("gzip", ignoreCase = true)
-                } && contentLength > 0
+                val lengthComputable = contentLength > 0
                 var totalBytesRead: Long = 0
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
