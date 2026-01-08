@@ -26,7 +26,7 @@ inline fun <R> HttpURLConnection.use(block: (HttpURLConnection) -> R): R {
  * Extension function to assert that an HTTP response was successful (2xx status code).
  * If the response was not successful, throws an IONFLTRException.HttpError with details
  * from the error stream.
- * 
+ *
  * @throws IONFLTRException.HttpError if the response code is not in the 200-299 range
  */
 
@@ -50,24 +50,21 @@ internal class IONFLTRConnectionHelper {
     /**
      * Sets up the HTTP connection with the provided options.
      */
-    fun setupConnection(urlString: String, httpOptions: IONFLTRTransferHttpOptions): HttpConnectionSetup {
+    fun setupConnection(urlString: String, httpOptions: IONFLTRTransferHttpOptions): HttpURLConnection {
         val url = URL(urlString)
         val connection = url.openConnection() as HttpURLConnection
-        
+
         // Set method
         connection.requestMethod = httpOptions.method
-        
+
         // Set timeouts
         connection.connectTimeout = httpOptions.connectTimeout
         connection.readTimeout = httpOptions.readTimeout
-        
+
         // Set headers
         httpOptions.headers.forEach { (key, value) ->
             connection.setRequestProperty(key, value)
         }
-
-        val isHttpGET = httpOptions.method.equals("GET", ignoreCase = true)
-        val encodeParams = httpOptions.shouldEncodeUrlParams && isHttpGET
 
         // Set redirect handling
         connection.instanceFollowRedirects = !httpOptions.disableRedirects
@@ -77,17 +74,27 @@ internal class IONFLTRConnectionHelper {
             connection.sslSocketFactory = httpOptions.sslSocketFactory
         }
 
-        // Set parameters
-        var paramString = ""
+        return connection
+    }
+
+    /**
+     * append params to url, if applicable
+     */
+    fun appendParamsToUrl(
+        urlString: String,
+        connection: HttpURLConnection,
+        httpOptions: IONFLTRTransferHttpOptions,
+        useChunkedMode: Boolean
+    ): HttpURLConnection {
         if (httpOptions.params.isNotEmpty()) {
-            paramString = buildString {
+            val paramString = buildString {
                 httpOptions.params.forEach { (key, values) ->
                     values.forEach { value ->
                         if (isNotEmpty()) append("&")
-                        val encodedKey = if (encodeParams) {
+                        val encodedKey = if (httpOptions.shouldEncodeUrlParams) {
                             java.net.URLEncoder.encode(key, StandardCharsets.UTF_8.name())
                         } else key
-                        val encodedValue = if (encodeParams) {
+                        val encodedValue = if (httpOptions.shouldEncodeUrlParams) {
                             java.net.URLEncoder.encode(value, StandardCharsets.UTF_8.name())
                         } else value
                         append("$encodedKey=$encodedValue")
@@ -95,28 +102,21 @@ internal class IONFLTRConnectionHelper {
                 }
             }
 
-            // for requests other than GET, params will be written in the request body.
-            if (isHttpGET) {
+            // for HTTP requests that aren't for multipart/form-data, params will be written in the request body.
+            if (!useMultipartFormData(httpOptions) || useChunkedMode) {
                 val separator = if (urlString.contains("?")) "&" else "?"
                 val newUrl = URL("$urlString$separator$paramString")
-                return HttpConnectionSetup(
-                    connection = newUrl.openConnection() as HttpURLConnection,
-                    paramStringToWrite = ""
-                )
-            } else {
-                // TODO move this block elsewhere
-                /*connection.doOutput = true
-                connection.outputStream.use { os ->
-                    os.write(paramString.toByteArray())
-                }*/
+                return newUrl.openConnection() as HttpURLConnection
             }
         }
-        
-        return HttpConnectionSetup(connection = connection, paramStringToWrite = paramString)
+        return connection
     }
-}
 
-internal data class HttpConnectionSetup(
-    val connection: HttpURLConnection,
-    val paramStringToWrite: String
-)
+    /**
+     * @return true for any HTTP request that isn't a multipart/form-data
+     */
+    internal fun useMultipartFormData(options: IONFLTRTransferHttpOptions): Boolean =
+        !options.headers.containsKey("Content-Type") &&
+                (options.method.equals("POST", ignoreCase = true) || options.method.equals("PUT", ignoreCase = true))
+
+}

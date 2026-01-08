@@ -2,7 +2,6 @@ package io.ionic.libs.ionfiletransferlib
 
 import android.content.Context
 import io.ionic.libs.ionfiletransferlib.helpers.FileToUploadInfo
-import io.ionic.libs.ionfiletransferlib.helpers.HttpConnectionSetup
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRConnectionHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRFileHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRInputsValidator
@@ -57,9 +56,9 @@ class IONFLTRController internal constructor(
     fun downloadFile(options: IONFLTRDownloadOptions): Flow<IONFLTRTransferResult> = flow {
         runCatchingIONFLTRExceptions {
             // Prepare for download
-            val (targetFile, connectionSetup) = prepareForDownload(options)
+            val (targetFile, connection) = prepareForDownload(options)
 
-            connectionSetup.connection.use { conn ->
+            connection.use { conn ->
                 // Execute the download and handle response
                 val contentLength = beginDownload(conn)
 
@@ -95,9 +94,9 @@ class IONFLTRController internal constructor(
     fun uploadFile(options: IONFLTRUploadOptions): Flow<IONFLTRTransferResult> = flow {
         runCatchingIONFLTRExceptions {
             // Prepare for upload
-            val (file, connectionSetup) = prepareForUpload(options)
+            val (file, connection) = prepareForUpload(options)
 
-            connectionSetup.connection.use { conn ->
+            connection.use { conn ->
                 // Execute the upload and handle response
                 val multiPartFormData = beginUpload(conn, options, file)
 
@@ -117,7 +116,7 @@ class IONFLTRController internal constructor(
     /**
      * Prepares for download by validating inputs, creating directories and setting up connection.
      */
-    private fun prepareForDownload(options: IONFLTRDownloadOptions): Pair<File, HttpConnectionSetup> {
+    private fun prepareForDownload(options: IONFLTRDownloadOptions): Pair<File, HttpURLConnection> {
         // Validate inputs
         val normalizedFilePath = fileHelper.normalizeFilePath(options.filePath)
         inputsValidator.validateTransferInputs(options.url, normalizedFilePath)
@@ -127,9 +126,11 @@ class IONFLTRController internal constructor(
         fileHelper.createParentDirectories(targetFile)
 
         // Setup connection
-        val connectionSetup = connectionHelper.setupConnection(options.url, options.httpOptions)
+        val connection = connectionHelper.setupConnection(options.url, options.httpOptions).let {
+            connectionHelper.appendParamsToUrl(options.url, it, options.httpOptions, useChunkedMode = false)
+        }
 
-        return Pair(targetFile, connectionSetup)
+        return Pair(targetFile, connection)
     }
 
     /**
@@ -243,7 +244,7 @@ class IONFLTRController internal constructor(
     /**
      * Prepares for upload by validating inputs and setting up connection.
      */
-    private fun prepareForUpload(options: IONFLTRUploadOptions): Pair<FileToUploadInfo, HttpConnectionSetup> {
+    private fun prepareForUpload(options: IONFLTRUploadOptions): Pair<FileToUploadInfo, HttpURLConnection> {
         // Validate inputs
         inputsValidator.validateTransferInputs(options.url, options.filePath)
 
@@ -251,9 +252,11 @@ class IONFLTRController internal constructor(
         val file = fileHelper.getFileToUploadInfo(options.filePath)
 
         // Setup connection
-        val connectionSetup = connectionHelper.setupConnection(options.url, options.httpOptions)
+        val connection = connectionHelper.setupConnection(options.url, options.httpOptions).let {
+            connectionHelper.appendParamsToUrl(options.url, it, options.httpOptions, options.chunkedMode)
+        }
 
-        return Pair(file, connectionSetup)
+        return Pair(file, connection)
     }
 
     /**
@@ -269,18 +272,16 @@ class IONFLTRController internal constructor(
     ): Pair<String, String>? {
         var multiPartUpload = false
         // Set content type if not already set
-        if (!options.httpOptions.headers.containsKey("Content-Type")) {
+        if (connectionHelper.useMultipartFormData(options.httpOptions) && !useChunkedMode) {
+            multiPartUpload = true
+            connection.setRequestProperty(
+                "Content-Type",
+                "multipart/form-data; boundary=$BOUNDARY"
+            )
+        } else if (!options.httpOptions.headers.containsKey("Content-Type")) {
             val mimeType = options.mimeType ?: fileHelper.getMimeType(options.filePath)
             ?: "application/octet-stream"
-            if (isPostOrPutMethod(options.httpOptions.method)) {
-                multiPartUpload = true
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "multipart/form-data; boundary=$BOUNDARY"
-                )
-            } else {
-                connection.setRequestProperty("Content-Type", mimeType)
-            }
+            connection.setRequestProperty("Content-Type", mimeType)
         }
 
         if (useChunkedMode) {
@@ -315,8 +316,9 @@ class IONFLTRController internal constructor(
         val boundary = "$LINE_START$BOUNDARY$LINE_END"
 
         val beforeData = buildString {
-            // Write additional form parameters if any
-            options.formParams?.forEach { (key, value) ->
+            // Write form parameters using the available attributes
+            val allParams = (options.formParams ?: emptyMap()) + options.httpOptions.params
+            allParams.forEach { (key, value) ->
                 append(boundary)
                 val paramHeader = "Content-Disposition: form-data; name=\"$key\"$LINE_END$LINE_END"
                 val paramValue = "$value$LINE_END"
@@ -396,7 +398,7 @@ class IONFLTRController internal constructor(
             emit(createUploadFileProgress(bytes = 0, total = 0))
             return 0L
         }
-        
+
         var totalBytesWritten: Long
 
         connection.outputStream.use { connOutputStream ->
@@ -446,15 +448,5 @@ class IONFLTRController internal constructor(
                 )
             )
         )
-    }
-
-    /**
-     * Checks if the HTTP method is either POST or PUT.
-     *
-     * @param method The HTTP method to check
-     * @return True if the method is POST or PUT, false otherwise
-     */
-    private fun isPostOrPutMethod(method: String): Boolean {
-        return method.equals("POST", ignoreCase = true) || method.equals("PUT", ignoreCase = true)
     }
 }
