@@ -2,6 +2,7 @@ package io.ionic.libs.ionfiletransferlib
 
 import android.content.Context
 import io.ionic.libs.ionfiletransferlib.helpers.FileToUploadInfo
+import io.ionic.libs.ionfiletransferlib.helpers.HttpConnectionSetup
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRConnectionHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRFileHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRInputsValidator
@@ -56,9 +57,9 @@ class IONFLTRController internal constructor(
     fun downloadFile(options: IONFLTRDownloadOptions): Flow<IONFLTRTransferResult> = flow {
         runCatchingIONFLTRExceptions {
             // Prepare for download
-            val (targetFile, connection) = prepareForDownload(options)
+            val (targetFile, connectionSetup) = prepareForDownload(options)
 
-            connection.use { conn ->
+            connectionSetup.connection.use { conn ->
                 // Execute the download and handle response
                 val contentLength = beginDownload(conn)
 
@@ -94,9 +95,9 @@ class IONFLTRController internal constructor(
     fun uploadFile(options: IONFLTRUploadOptions): Flow<IONFLTRTransferResult> = flow {
         runCatchingIONFLTRExceptions {
             // Prepare for upload
-            val (file, connection) = prepareForUpload(options)
+            val (file, connectionSetup) = prepareForUpload(options)
 
-            connection.use { conn ->
+            connectionSetup.connection.use { conn ->
                 // Execute the upload and handle response
                 val multiPartFormData = beginUpload(conn, options, file)
 
@@ -116,7 +117,7 @@ class IONFLTRController internal constructor(
     /**
      * Prepares for download by validating inputs, creating directories and setting up connection.
      */
-    private fun prepareForDownload(options: IONFLTRDownloadOptions): Pair<File, HttpURLConnection> {
+    private fun prepareForDownload(options: IONFLTRDownloadOptions): Pair<File, HttpConnectionSetup> {
         // Validate inputs
         val normalizedFilePath = fileHelper.normalizeFilePath(options.filePath)
         inputsValidator.validateTransferInputs(options.url, normalizedFilePath)
@@ -126,9 +127,9 @@ class IONFLTRController internal constructor(
         fileHelper.createParentDirectories(targetFile)
 
         // Setup connection
-        val connection = connectionHelper.setupConnection(options.url, options.httpOptions)
+        val connectionSetup = connectionHelper.setupConnection(options.url, options.httpOptions)
 
-        return Pair(targetFile, connection)
+        return Pair(targetFile, connectionSetup)
     }
 
     /**
@@ -242,7 +243,7 @@ class IONFLTRController internal constructor(
     /**
      * Prepares for upload by validating inputs and setting up connection.
      */
-    private fun prepareForUpload(options: IONFLTRUploadOptions): Pair<FileToUploadInfo, HttpURLConnection> {
+    private fun prepareForUpload(options: IONFLTRUploadOptions): Pair<FileToUploadInfo, HttpConnectionSetup> {
         // Validate inputs
         inputsValidator.validateTransferInputs(options.url, options.filePath)
 
@@ -250,9 +251,9 @@ class IONFLTRController internal constructor(
         val file = fileHelper.getFileToUploadInfo(options.filePath)
 
         // Setup connection
-        val connection = connectionHelper.setupConnection(options.url, options.httpOptions)
+        val connectionSetup = connectionHelper.setupConnection(options.url, options.httpOptions)
 
-        return Pair(file, connection)
+        return Pair(file, connectionSetup)
     }
 
     /**

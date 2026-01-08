@@ -46,11 +46,11 @@ fun HttpURLConnection.assertSuccessHttpResponse() {
 /**
  * Helper class for setting up HTTP connections with proper configuration.
  */
-class IONFLTRConnectionHelper {
+internal class IONFLTRConnectionHelper {
     /**
      * Sets up the HTTP connection with the provided options.
      */
-    fun setupConnection(urlString: String, httpOptions: IONFLTRTransferHttpOptions): HttpURLConnection {
+    fun setupConnection(urlString: String, httpOptions: IONFLTRTransferHttpOptions): HttpConnectionSetup {
         val url = URL(urlString)
         val connection = url.openConnection() as HttpURLConnection
         
@@ -65,44 +65,58 @@ class IONFLTRConnectionHelper {
         httpOptions.headers.forEach { (key, value) ->
             connection.setRequestProperty(key, value)
         }
-        
+
+        val isHttpGET = httpOptions.method.equals("GET", ignoreCase = true)
+        val encodeParams = httpOptions.shouldEncodeUrlParams && isHttpGET
+
+        // Set redirect handling
+        connection.instanceFollowRedirects = !httpOptions.disableRedirects
+
+        // Set SSL factory if provided
+        if (httpOptions.sslSocketFactory != null && connection is javax.net.ssl.HttpsURLConnection) {
+            connection.sslSocketFactory = httpOptions.sslSocketFactory
+        }
+
         // Set parameters
+        var paramString = ""
         if (httpOptions.params.isNotEmpty()) {
-            val paramString = buildString {
+            paramString = buildString {
                 httpOptions.params.forEach { (key, values) ->
                     values.forEach { value ->
                         if (isNotEmpty()) append("&")
-                        val encodedKey = if (httpOptions.shouldEncodeUrlParams) {
+                        val encodedKey = if (encodeParams) {
                             java.net.URLEncoder.encode(key, StandardCharsets.UTF_8.name())
                         } else key
-                        val encodedValue = if (httpOptions.shouldEncodeUrlParams) {
+                        val encodedValue = if (encodeParams) {
                             java.net.URLEncoder.encode(value, StandardCharsets.UTF_8.name())
                         } else value
                         append("$encodedKey=$encodedValue")
                     }
                 }
             }
-            
-            if (httpOptions.method.equals("GET", ignoreCase = true)) {
+
+            // for requests other than GET, params will be written in the request body.
+            if (isHttpGET) {
                 val separator = if (urlString.contains("?")) "&" else "?"
                 val newUrl = URL("$urlString$separator$paramString")
-                return newUrl.openConnection() as HttpURLConnection
+                return HttpConnectionSetup(
+                    connection = newUrl.openConnection() as HttpURLConnection,
+                    paramStringToWrite = ""
+                )
             } else {
-                connection.doOutput = true
+                // TODO move this block elsewhere
+                /*connection.doOutput = true
                 connection.outputStream.use { os ->
                     os.write(paramString.toByteArray())
-                }
+                }*/
             }
         }
         
-        // Set redirect handling
-        connection.instanceFollowRedirects = !httpOptions.disableRedirects
-        
-        // Set SSL factory if provided
-        if (httpOptions.sslSocketFactory != null && connection is javax.net.ssl.HttpsURLConnection) {
-            connection.sslSocketFactory = httpOptions.sslSocketFactory
-        }
-        
-        return connection
+        return HttpConnectionSetup(connection = connection, paramStringToWrite = paramString)
     }
-} 
+}
+
+internal data class HttpConnectionSetup(
+    val connection: HttpURLConnection,
+    val paramStringToWrite: String
+)
