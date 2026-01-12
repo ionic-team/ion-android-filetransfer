@@ -126,7 +126,9 @@ class IONFLTRController internal constructor(
         fileHelper.createParentDirectories(targetFile)
 
         // Setup connection
-        val connection = connectionHelper.setupConnection(options.url, options.httpOptions)
+        val connection = connectionHelper.setupConnection(options.url, options.httpOptions).let {
+            connectionHelper.appendParamsToUrl(options.url, it, options.httpOptions, useChunkedMode = false)
+        }
 
         return Pair(targetFile, connection)
     }
@@ -250,7 +252,9 @@ class IONFLTRController internal constructor(
         val file = fileHelper.getFileToUploadInfo(options.filePath)
 
         // Setup connection
-        val connection = connectionHelper.setupConnection(options.url, options.httpOptions)
+        val connection = connectionHelper.setupConnection(options.url, options.httpOptions).let {
+            connectionHelper.appendParamsToUrl(options.url, it, options.httpOptions, options.chunkedMode)
+        }
 
         return Pair(file, connection)
     }
@@ -268,18 +272,16 @@ class IONFLTRController internal constructor(
     ): Pair<String, String>? {
         var multiPartUpload = false
         // Set content type if not already set
-        if (!options.httpOptions.headers.containsKey("Content-Type")) {
+        if (connectionHelper.useMultipartFormData(options.httpOptions) && !useChunkedMode) {
+            multiPartUpload = true
+            connection.setRequestProperty(
+                "Content-Type",
+                "multipart/form-data; boundary=$BOUNDARY"
+            )
+        } else if (!options.httpOptions.headers.containsKey("Content-Type")) {
             val mimeType = options.mimeType ?: fileHelper.getMimeType(options.filePath)
             ?: "application/octet-stream"
-            if (isPostOrPutMethod(options.httpOptions.method)) {
-                multiPartUpload = true
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "multipart/form-data; boundary=$BOUNDARY"
-                )
-            } else {
-                connection.setRequestProperty("Content-Type", mimeType)
-            }
+            connection.setRequestProperty("Content-Type", mimeType)
         }
 
         if (useChunkedMode) {
@@ -314,8 +316,9 @@ class IONFLTRController internal constructor(
         val boundary = "$LINE_START$BOUNDARY$LINE_END"
 
         val beforeData = buildString {
-            // Write additional form parameters if any
-            options.formParams?.forEach { (key, value) ->
+            // Write form parameters using the available attributes
+            val allParams = (options.formParams ?: emptyMap()) + options.httpOptions.params
+            allParams.forEach { (key, value) ->
                 append(boundary)
                 val paramHeader = "Content-Disposition: form-data; name=\"$key\"$LINE_END$LINE_END"
                 val paramValue = "$value$LINE_END"
@@ -395,7 +398,7 @@ class IONFLTRController internal constructor(
             emit(createUploadFileProgress(bytes = 0, total = 0))
             return 0L
         }
-        
+
         var totalBytesWritten: Long
 
         connection.outputStream.use { connOutputStream ->
@@ -445,15 +448,5 @@ class IONFLTRController internal constructor(
                 )
             )
         )
-    }
-
-    /**
-     * Checks if the HTTP method is either POST or PUT.
-     *
-     * @param method The HTTP method to check
-     * @return True if the method is POST or PUT, false otherwise
-     */
-    private fun isPostOrPutMethod(method: String): Boolean {
-        return method.equals("POST", ignoreCase = true) || method.equals("PUT", ignoreCase = true)
     }
 }
