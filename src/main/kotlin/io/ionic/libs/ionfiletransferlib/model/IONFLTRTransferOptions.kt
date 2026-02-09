@@ -8,12 +8,36 @@ import javax.net.ssl.SSLSocketFactory
  * @property url The URL to download the file from
  * @property filePath The local path where the downloaded file will be saved
  * @property httpOptions Additional HTTP options for the download request
+ * @property body The request body as bytes
  */
 data class IONFLTRDownloadOptions(
     val url: String,
     val filePath: String,
-    val httpOptions: IONFLTRTransferHttpOptions = IONFLTRTransferHttpOptions("GET")
-)
+    val httpOptions: IONFLTRTransferHttpOptions = IONFLTRTransferHttpOptions("GET"),
+    val body: ByteArray? = null
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as IONFLTRDownloadOptions
+
+        if (url != other.url) return false
+        if (filePath != other.filePath) return false
+        if (httpOptions != other.httpOptions) return false
+        if (!body.contentEquals(other.body)) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = url.hashCode()
+        result = 31 * result + filePath.hashCode()
+        result = 31 * result + httpOptions.hashCode()
+        result = 31 * result + (body?.contentHashCode() ?: 0)
+        return result
+    }
+}
 
 /**
  * Options for uploading a file

@@ -4,6 +4,7 @@ import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRTransferHttpOptions
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
 /**
@@ -40,6 +41,43 @@ fun HttpURLConnection.assertSuccessHttpResponse() {
             it,
             headerFields
         )
+    }
+}
+
+fun HttpURLConnection.setRequestBody(
+    body: String,
+    charset: Charset = StandardCharsets.UTF_8,
+    contentType: String? = null,
+    useChunkedMode: Boolean = false,
+) {
+    val bytes = body.toByteArray(charset = charset)
+    setRequestBody(
+        bytes,
+        contentType?.let { "$it; charset=${charset.name()}" },
+        useChunkedMode
+    )
+}
+
+fun HttpURLConnection.setRequestBody(
+    bytes: ByteArray,
+    contentType: String? = null,
+    useChunkedMode: Boolean = false
+) {
+    if (contentType != null && this.getRequestProperty("Content-Type") == null) {
+        this.setRequestProperty("Content-Type", contentType);
+    }
+
+    this.doOutput = true
+
+    if (useChunkedMode) {
+        this.setChunkedStreamingMode(0)
+    } else {
+        this.setFixedLengthStreamingMode(bytes.size)
+    }
+
+    this.getOutputStream().use {
+        it.write(bytes)
+        it.flush()
     }
 }
 
