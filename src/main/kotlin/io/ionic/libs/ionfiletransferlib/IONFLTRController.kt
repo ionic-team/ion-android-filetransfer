@@ -7,6 +7,7 @@ import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRFileHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRInputsValidator
 import io.ionic.libs.ionfiletransferlib.helpers.assertSuccessHttpResponse
 import io.ionic.libs.ionfiletransferlib.helpers.runCatchingIONFLTRExceptions
+import io.ionic.libs.ionfiletransferlib.helpers.setRequestBody
 import io.ionic.libs.ionfiletransferlib.helpers.use
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRDownloadOptions
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRProgressStatus
@@ -59,6 +60,9 @@ class IONFLTRController internal constructor(
             val (targetFile, connection) = prepareForDownload(options)
 
             connection.use { conn ->
+                // Set the request body if it's present
+                options.body?.let { conn.setRequestBody(it) }
+
                 // Execute the download and handle response
                 val contentLength = beginDownload(conn)
 
