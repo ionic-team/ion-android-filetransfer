@@ -8,11 +8,14 @@ import javax.net.ssl.SSLSocketFactory
  * @property url The URL to download the file from
  * @property filePath The local path where the downloaded file will be saved
  * @property httpOptions Additional HTTP options for the download request
+ * @property id Optional identifier for the download; pass it to
+ *  [io.ionic.libs.ionfiletransferlib.IONFLTRController.abortTransfer] to abort the download
  */
 data class IONFLTRDownloadOptions(
     val url: String,
     val filePath: String,
-    val httpOptions: IONFLTRTransferHttpOptions = IONFLTRTransferHttpOptions("GET")
+    val httpOptions: IONFLTRTransferHttpOptions = IONFLTRTransferHttpOptions("GET"),
+    val id: String? = null
 )
 
 /**

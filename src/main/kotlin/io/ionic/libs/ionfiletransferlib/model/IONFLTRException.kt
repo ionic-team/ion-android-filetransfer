@@ -33,6 +33,9 @@ sealed class IONFLTRException(
     class TransferError(override val cause: Throwable?) :
         IONFLTRException("Error during file transfer", cause)
         
+    class TransferAborted(val id: String?) :
+        IONFLTRException("The file transfer was aborted.")
+
     class UnknownError(override val cause: Throwable?) :
         IONFLTRException("An unknown error occurred while trying to run the operation", cause)
 } 

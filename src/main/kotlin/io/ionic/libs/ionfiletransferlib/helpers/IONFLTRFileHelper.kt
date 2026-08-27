@@ -99,6 +99,21 @@ internal class IONFLTRFileHelper(val contentResolver: ContentResolver) {
     }
 
     /**
+     * Deletes a file, ignoring any error while doing so.
+     *
+     * Used to clean up partially downloaded files when a download is aborted.
+     *
+     * @param file The file to delete
+     */
+    fun deleteFile(file: File) {
+        try {
+            file.delete()
+        } catch (ex: SecurityException) {
+            // there is no partial file to clean up if it cannot be accessed
+        }
+    }
+
+    /**
      * Gets the size of the that the content uri is pointing to.
      *
      * Will try to open the file and get its size if the android [Cursor] does not have the necessary column.

@@ -5,15 +5,19 @@ import io.ionic.libs.ionfiletransferlib.helpers.FileToUploadInfo
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRConnectionHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRFileHelper
 import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRInputsValidator
+import io.ionic.libs.ionfiletransferlib.helpers.IONFLTRTransferHandle
 import io.ionic.libs.ionfiletransferlib.helpers.assertSuccessHttpResponse
 import io.ionic.libs.ionfiletransferlib.helpers.runCatchingIONFLTRExceptions
 import io.ionic.libs.ionfiletransferlib.helpers.use
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRDownloadOptions
+import io.ionic.libs.ionfiletransferlib.model.IONFLTRException
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRProgressStatus
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRTransferComplete
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRTransferResult
 import io.ionic.libs.ionfiletransferlib.model.IONFLTRUploadOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -23,6 +27,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Entry point in IONFileTransferLib-Android
@@ -40,6 +45,11 @@ class IONFLTRController internal constructor(
         connectionHelper = IONFLTRConnectionHelper()
     )
 
+    /**
+     * The transfers that are currently in progress and were given an id, by id.
+     */
+    private val activeTransfers = ConcurrentHashMap<String, IONFLTRTransferHandle>()
+
     companion object {
         private const val BUFFER_SIZE = 8192 // 8KB buffer size
         private const val BOUNDARY = "++++IONFLTRBoundary"
@@ -50,40 +60,86 @@ class IONFLTRController internal constructor(
     /**
      * Downloads a file from a remote URL to a local file path.
      *
+     * The download can be aborted by calling [abortTransfer] with the id in
+     * [IONFLTRDownloadOptions.id], which interrupts the download immediately.
+     * Cancelling the coroutine that is collecting the flow also stops the download,
+     * although only once the chunk being read at that moment is done.
+     *
      * @param options The download options including URL and file path
-     * @return A Flow of [IONFLTRTransferResult] to track progress and completion
+     * @return A Flow of [IONFLTRTransferResult] to track progress and completion;
+     *  it fails with [IONFLTRException.TransferAborted] if the download is aborted via [abortTransfer]
      */
     fun downloadFile(options: IONFLTRDownloadOptions): Flow<IONFLTRTransferResult> = flow {
-        runCatchingIONFLTRExceptions {
-            // Prepare for download
-            val (targetFile, connection) = prepareForDownload(options)
+        val handle = registerTransfer(options.id)
+        var targetFile: File? = null
+        try {
+            runCatchingIONFLTRExceptions {
+                handle.throwIfAborted()
 
-            connection.use { conn ->
-                // Execute the download and handle response
-                val contentLength = beginDownload(conn)
+                // Prepare for download
+                val (file, connection) = prepareForDownload(options)
+                targetFile = file
+                handle.setConnection(connection)
 
-                // Perform the actual file download with progress reporting
-                val totalBytesRead = downloadFileWithProgress(
-                    connection = conn,
-                    targetFile = targetFile,
-                    contentLength = contentLength,
-                    emit = { emit(it) }
-                )
+                connection.use { conn ->
+                    // Execute the download and handle response
+                    val contentLength = beginDownload(conn)
 
-                // Emit completion
-                emit(
-                    IONFLTRTransferResult.Complete(
-                        IONFLTRTransferComplete(
-                            totalBytes = totalBytesRead,
-                            responseCode = conn.responseCode.toString(),
-                            responseBody = null,
-                            headers = conn.headerFields
+                    // Perform the actual file download with progress reporting
+                    val totalBytesRead = downloadFileWithProgress(
+                        connection = conn,
+                        targetFile = file,
+                        contentLength = contentLength,
+                        handle = handle,
+                        emit = { emit(it) }
+                    )
+
+                    // Emit completion
+                    emit(
+                        IONFLTRTransferResult.Complete(
+                            IONFLTRTransferComplete(
+                                totalBytes = totalBytesRead,
+                                responseCode = conn.responseCode.toString(),
+                                responseBody = null,
+                                headers = conn.headerFields
+                            )
                         )
                     )
-                )
+                }
+            }.getOrElse { error ->
+                // an abort closes the connection, so the resulting error is replaced by TransferAborted
+                val mappedError = handle.mapErrorIfAborted(error)
+                if (mappedError is IONFLTRException.TransferAborted) {
+                    // the partially downloaded file is of no use to anyone
+                    targetFile?.let { fileHelper.deleteFile(it) }
+                }
+                throw mappedError
             }
-        }.getOrThrow()
+        } finally {
+            options.id?.let { activeTransfers.remove(it, handle) }
+        }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Aborts an ongoing transfer that was started with the provided id.
+     *
+     * The flow of the aborted transfer fails with [IONFLTRException.TransferAborted],
+     * and any partially downloaded file is deleted.
+     *
+     * @param id The id that was provided in [IONFLTRDownloadOptions.id]
+     * @return true if there was an ongoing transfer with the provided id, false otherwise
+     */
+    fun abortTransfer(id: String): Boolean =
+        activeTransfers[id]?.also { it.abort() } != null
+
+    /**
+     * @param id The id of the transfer, if any
+     * @return the handle to use for tracking (and aborting) the transfer
+     */
+    private fun registerTransfer(id: String?): IONFLTRTransferHandle =
+        IONFLTRTransferHandle(id).also { handle ->
+            id?.let { activeTransfers[it] = handle }
+        }
 
     /**
      * Uploads a file from a local path to a remote URL.
@@ -181,6 +237,7 @@ class IONFLTRController internal constructor(
         connection: HttpURLConnection,
         targetFile: File,
         contentLength: Long,
+        handle: IONFLTRTransferHandle,
         emit: suspend (IONFLTRTransferResult) -> Unit
     ): Long = BufferedInputStream(connection.inputStream).use { inputStream ->
         FileOutputStream(targetFile).use { fileOut ->
@@ -191,6 +248,8 @@ class IONFLTRController internal constructor(
                 var totalBytesRead: Long = 0
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    handle.throwIfAborted()
+                    currentCoroutineContext().ensureActive()
                     outputStream.write(buffer, 0, bytesRead)
                     totalBytesRead += bytesRead
 
