@@ -6,10 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## 1.0.4
+## 2.0.0
 
 ### 2026-10-30
 
+- **Breaking:** minSdk raised from 23 to 24.
 - Chore: Update dependencies and build tooling (Gradle 8.14.3, AGP 8.13.0, compileSdk/targetSdk 36, minSdk 24, androidx libraries).
 
 ## 1.0.3
