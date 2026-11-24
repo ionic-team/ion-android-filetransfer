@@ -29,6 +29,12 @@ else
 
     if grep --quiet "BUILD SUCCESSFUL" $LOG_OUTPUT; then
         printf %"s\n" "Success: Published to MavenCentral."
+
+        # Let the workflow know a new version was published (used to create the GitHub release)
+        if [[ -n "$GITHUB_OUTPUT" ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "version=$THE_VERSION" >> "$GITHUB_OUTPUT"
+        fi
     else
         printf %"s\n" "Error publishing, check $LOG_OUTPUT for more info! Manually review and release from the Central Portal may be necessary https://central.sonatype.com/publishing/deployments/"
         cat $LOG_OUTPUT

@@ -6,7 +6,7 @@ jobs:
   publish-android:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +31,35 @@ jobs:
           EOF
           echo "local.properties file has been created successfully."
       - name: Run publish script
+        id: publish
         working-directory: ./scripts
         run: ./publish-android.sh
+      - name: Create GitHub release
+        # Only when this run actually published a new version, and only from a release branch
+        if: steps.publish.outputs.published == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.publish.outputs.version }}
+        run: |
+          if gh release view "$VERSION" > /dev/null 2>&1; then
+            echo "Release $VERSION already exists, skipping."
+            exit 0
+          fi
+
+          # Release notes: the matching CHANGELOG.md section, falling back to generated notes
+          awk -v v="$VERSION" '
+            /^## / { if (found) exit; h=$0; sub(/^## \[?v?/, "", h); sub(/\].*$/, "", h); sub(/ .*$/, "", h); if (h == v) { found=1; next } }
+            found { print }
+          ' CHANGELOG.md > release-notes.md 2>/dev/null || true
+
+          args=(--target "$GITHUB_SHA" --title "$VERSION")
+          if [[ -s release-notes.md ]] && grep -q '[^[:space:]]' release-notes.md; then
+            args+=(--notes-file release-notes.md)
+          else
+            args+=(--generate-notes)
+          fi
+          if [[ "$VERSION" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+
+          gh release create "$VERSION" "${args[@]}"
