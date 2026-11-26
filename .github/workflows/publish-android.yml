@@ -5,8 +5,11 @@ on: workflow_dispatch
 jobs:
   publish-android:
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      version: ${{ steps.publish.outputs.version }}
     permissions:
-      contents: write
+      contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -34,12 +37,21 @@ jobs:
         id: publish
         working-directory: ./scripts
         run: ./publish-android.sh
+
+  create-release:
+    # Separate job so only this one gets contents: write; the Gradle build above keeps a read-only token.
+    # If the release fails, "Re-run failed jobs" retries it without republishing to Maven Central.
+    needs: publish-android
+    if: needs.publish-android.outputs.published == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
       - name: Create GitHub release
-        # Only when this run actually published a new version, and only from a release branch
-        if: steps.publish.outputs.published == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.publish.outputs.version }}
+          VERSION: ${{ needs.publish-android.outputs.version }}
         run: |
           if gh release view "$VERSION" > /dev/null 2>&1; then
             echo "Release $VERSION already exists, skipping."
